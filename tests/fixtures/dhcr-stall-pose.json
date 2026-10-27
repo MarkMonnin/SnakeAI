@@ -1,0 +1,13 @@
+{
+  "id": "dhcr-stall-6x6",
+  "note": "6x6 seed 372210 livelock pose: repaired cycle chose S; Ham chooses E; pose-repeat must SafeHam",
+  "size": 6,
+  "seed": 372210,
+  "snake": [[0, 3], [0, 2], [0, 1], [0, 0], [1, 0]],
+  "food": [4, 0],
+  "facing": 1,
+  "rejectAction": 2,
+  "rejectName": "S",
+  "expectHamAction": 1,
+  "expectHamName": "E"
+}

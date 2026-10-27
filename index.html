@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake AI Shape Search</title>
+  <link rel="stylesheet" href="snake-shapesearch.css?v=8">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>Snake AI Shape Search</h1>
+      <p class="subtitle">Train learners or watch clever Snake solvers. Runs in your browser.</p>
+      <p id="labSaveStatus" class="save-status" aria-live="polite" hidden>not saved yet</p>
+      <p id="perfWarn" class="save-status" hidden style="color:#b45309;">Warning: UI updates are taking 1s or longer. Consider a smaller board or fewer bots.</p>
+    </header>
+
+    <nav class="tab-bar" role="tablist" aria-label="Main sections">
+      <button type="button" id="tabPlay" class="tab tab-active" role="tab" aria-selected="true" aria-controls="panelPlay">Observe</button>
+      <button type="button" id="tabSearch" class="tab" role="tab" aria-selected="false" aria-controls="panelSearch">Shape Search</button>
+      <button type="button" id="tabTrain" class="tab" role="tab" aria-selected="false" aria-controls="panelTrain">Train One</button>
+      <button type="button" id="tabAbout" class="tab" role="tab" aria-selected="false" aria-controls="panelAbout">About</button>
+    </nav>
+
+    <div id="panelPlay" class="tab-panel" role="tabpanel"></div>
+
+    <div id="panelSearch" class="tab-panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <button type="button" id="btnPauseSearch" class="btn">Pause Search</button>
+        <button type="button" id="btnRunTournSearch" class="btn">Run tournament</button>
+        <button type="button" id="btnSaveLab" class="btn">Save now</button>
+        <button type="button" id="btnResetLab" class="btn btn-danger">Reset all</button>
+        <label class="play-label hard-mode-toggle" for="selVisionMode" title="Adaptive: offspring vision +/-1. Or fix all bots to one radius.">
+          Vision
+          <select id="selVisionMode" class="play-select">
+            <option value="adaptive" selected>Adaptive</option>
+            <option value="1">r1</option>
+            <option value="2">r2</option>
+            <option value="3">r3</option>
+            <option value="4">r4</option>
+            <option value="5">r5</option>
+            <option value="6">r6</option>
+            <option value="7">r7</option>
+            <option value="8">r8</option>
+            <option value="9">r9</option>
+            <option value="10">r10</option>
+          </select>
+        </label>
+        <div class="toolbar-checks">
+          <label class="play-label hard-mode-toggle" for="chkCompass" title="Four food-direction inputs. Saved in browser storage.">
+            <input type="checkbox" id="chkCompass" checked> Food compass
+          </label>
+          <label class="play-label hard-mode-toggle" for="chkTeachEachOther" title="On shared pool boards, the best bot teaches other online learners. Does not reset bots.">
+            <input type="checkbox" id="chkTeachEachOther"> Teach each other
+          </label>
+          <label class="play-label hard-mode-toggle" for="chkLearnFromMaster" title="When Teach each other is on, baselines also race; winner may teach. Does not reset bots.">
+            <input type="checkbox" id="chkLearnFromMaster"> Learn from Master
+          </label>
+        </div>
+      </div>
+      <div id="searchStatus" class="status-bar">Loading...</div>
+      <section class="panel">
+        <h2>Population (this round)</h2>
+        <pre id="searchTable" class="mono">(loading)</pre>
+      </section>
+      <section class="panel">
+        <h2 id="searchTournHeading">Latest tournament</h2>
+        <pre id="searchTourn" class="mono">(none yet)</pre>
+      </section>
+      <section class="panel">
+        <h2>Tournament history</h2>
+        <pre id="searchHistory" class="mono">(none yet)</pre>
+      </section>
+    </div>
+
+    <div id="panelTrain" class="tab-panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <label class="play-label" for="trainBotSelect">Bot</label>
+        <select id="trainBotSelect" class="play-select"></select>
+        <button type="button" id="btnStartTrain" class="btn btn-primary">Start / load</button>
+        <button type="button" id="btnPauseTrain" class="btn">Pause</button>
+        <button type="button" id="btnExportTrain" class="btn">Export</button>
+        <button type="button" id="btnImportTrain" class="btn"
+          title="Load a bot JSON exported from Train One">Import</button>
+        <input type="file" id="trainImportFile" accept="application/json,.json" hidden>
+        <button type="button" id="btnPromoteTrain" class="btn"
+          title="Save trainee into Shape Search.">Save to Search</button>
+        <button type="button" id="btnRestartLadder" class="btn"
+          title="Keep learned weights; restart ladder from 4x4">Restart ladder</button>
+        <button type="button" id="btnResetTrain" class="btn"
+          title="Wipe weights and start a fresh untrained agent">Reset trainee</button>
+      </div>
+      <div id="trainStatus" class="status-bar">Pick a bot from the latest round or tournament.</div>
+      <section class="panel">
+        <h2>Size ladder (time to clear each size)</h2>
+        <pre id="trainLadder" class="mono">(not started)</pre>
+      </section>
+      <section class="panel">
+        <h2>Standing vs latest contenders</h2>
+        <pre id="trainTourn" class="mono">(no tournament yet)</pre>
+      </section>
+    </div>
+
+    <div id="panelAbout" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel about-panel">
+        <h2>About</h2>
+        <p>
+          This lab lets you train neural and tabular agents to play Snake, but the game
+          is hard enough that <strong>clever algorithms are the practical way to go</strong>.
+          Open <strong>Observe</strong> to watch baselines and AIs in training; use Shape
+          Search / Train One if you want to keep pushing learners.
+        </p>
+        <p>
+          Full writeup and credits: <a href="README.md">README.md</a>
+        </p>
+
+        <h3>Credits</h3>
+        <ul class="about-list">
+          <li>
+            <strong>Hamilton</strong> - classic grid Hamiltonian cycle + shortcuts;
+            popular Snake writeups include
+            <a href="https://johnflux.com/2015/05/02/nokia-6110-part-3-algorithms/" rel="noopener noreferrer" target="_blank">John Flux (Nokia 6110)</a>.
+          </li>
+          <li>
+            <strong>Cell Tree</strong> -
+            <a href="https://github.com/twanvl/snake/" rel="noopener noreferrer" target="_blank">twanvl/snake</a>
+            (2x2 right-hand drive + spanning tree).
+          </li>
+          <li>
+            <strong>DHCR</strong> -
+            <a href="https://github.com/BrianHaidet/AlphaPhoenix/tree/master/Snake_AI_(2020a)_DHCR_with_strategy" rel="noopener noreferrer" target="_blank">Brian Haidet / AlphaPhoenix</a>
+            (Dynamic Hamiltonian Cycle Repair); also in
+            <a href="https://github.com/twanvl/snake/" rel="noopener noreferrer" target="_blank">twanvl/snake</a>.
+          </li>
+          <li>
+            <strong>Tail Safe</strong> - tip-vacate + open-space ranking.
+            Related tip-after-eat ideas appear in
+            <a href="https://github.com/chuyangliu/snake/blob/master/docs/algorithms.md" rel="noopener noreferrer" target="_blank">chuyangliu/snake</a>.
+          </li>
+        </ul>
+
+        <h3>Algorithms (in short)</h3>
+        <dl class="about-dl">
+          <dt>Master</dt>
+          <dd>Even boards use Cell Tree; odd boards use Tail Safe Hybrid. It is the default Observe bot and topped the 4..11 x100 tournament.</dd>
+          <dt>Cell Tree</dt>
+          <dd>Drives clockwise in every 2x2 cell and crosses cells only on a spanning tree. Even boards use the full grid. Odd boards stay on Cell Tree Odd until fill reaches about 36%, then transitions to Hamilton.</dd>
+          <dt>Cell Tree Odd</dt>
+          <dd>Dedicated no-Hamilton odd algorithm (Cell Tree hybrid listed above falls back to Hamilton for odd-size boards). Even boards use full-board Cell Tree. About a 54% win rate on 11x11 boards.</dd>
+          <dt>DHCR / DHCR Improved</dt>
+          <dd>Keeps a Hamiltonian cycle and shortcuts only when the cycle can be rewritten to stay Hamiltonian. Improved handles when the repaired cycle loops (state repeat / starve), then returns to repair after the next apple.</dd>
+          <dt>Hamilton / Hamilton Aggressive</dt>
+          <dd>Follows a fixed Hamiltonian cycle with gated free-arc shortcuts. Aggressive takes more shortcuts early (under about 20% fill), then matches normal Hamilton.</dd>
+          <dt>Tail Safe / Tail Safe Hybrid</dt>
+          <dd>Ranks moves by tail-reachability and open space (tip treated empty on the next non-eat). Hybrid runs Tail Safe until a loop or ~20% fill, then transitions to Hamilton.</dd>
+          <dt>Plan Ahead</dt>
+          <dd>Plans a short path that stays in the largest opening, then enters Hamilton transition with a lookahead when stuck. It re-enters planning and does not hand off to Hamilton, though late-game can look similar to Hamilton because the transition method matches that.</dd>
+          <dt>Avoid Pocket / BFS / Greedy / Wall follower / Random</dt>
+          <dd>Classic heuristics: pocket-safe BFS, shortest path, Manhattan greedy, wall hug, or a random legal step. They move quickly early but rarely finish large boards alone.</dd>
+        </dl>
+      </section>
+    </div>
+    <div id="loadError" class="error" hidden></div>
+  </div>
+
+  <script src="snake_js/constants.js?v=7"></script>
+  <script src="snake_js/snake-env.js?v=22"></script>
+  <script src="snake_js/published-agents.js?v=80"></script>
+  <script src="snake_js/network.js?v=1"></script>
+  <script src="vendor/tf.min.js?v=4.22.0"></script>
+  <script src="snake_js/agents.js?v=1"></script>
+  <script src="snake_js/engine.js?v=11"></script>
+  <script src="snake_js/shape-lab.js?v=17"></script>
+  <script src="snake_js/play.js?v=22"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      function showError(msg) {
+        var box = document.getElementById("loadError");
+        box.hidden = false;
+        box.textContent = msg;
+      }
+
+      function boot() {
+      try {
+        ["SNAKE_CONSTANTS", "SNAKE_ENV", "SNAKE_NN", "SNAKE_AGENTS", "SNAKE_APP", "SNAKE_SHAPE_LAB", "SNAKE_PLAY"]
+          .forEach(function (n) {
+            if (!window[n]) {
+              throw new Error("Missing " + n);
+            }
+          });
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+
+      var els = {
+        labSaveStatus: document.getElementById("labSaveStatus"),
+        searchStatus: document.getElementById("searchStatus"),
+        searchTable: document.getElementById("searchTable"),
+        searchTournHeading: document.getElementById("searchTournHeading"),
+        searchTourn: document.getElementById("searchTourn"),
+        searchHistory: document.getElementById("searchHistory"),
+        trainStatus: document.getElementById("trainStatus"),
+        trainLadder: document.getElementById("trainLadder"),
+        trainTourn: document.getElementById("trainTourn"),
+        trainBotSelect: document.getElementById("trainBotSelect"),
+        btnPauseSearch: document.getElementById("btnPauseSearch")
+      };
+
+      function padRight(s, n) {
+        s = String(s);
+        if (s.length > n) {
+          return s.slice(0, Math.max(0, n - 1)) + (n > 0 ? "~" : "");
+        }
+        while (s.length < n) {
+          s += " ";
+        }
+        return s;
+      }
+
+      function padLeft(s, n) {
+        s = String(s);
+        if (s.length > n) {
+          return s.slice(0, Math.max(0, n - 1)) + (n > 0 ? "~" : "");
+        }
+        while (s.length < n) {
+          s = " " + s;
+        }
+        return s;
+      }
+
+      function dashRepeat(n) {
+        var out = "";
+        var i;
+        for (i = 0; i < n; i += 1) {
+          out += "-";
+        }
+        return out;
+      }
+
+      function formatWr(row) {
+        var wr = row.lastEvalWinRate;
+        if (typeof wr !== "number") {
+          return "-";
+        }
+        var pct = wr * 100;
+        var tenths = Math.round(pct * 10) / 10;
+        if (Math.abs(tenths - Math.round(tenths)) < 1e-9) {
+          return Math.round(tenths) + "%";
+        }
+        return tenths.toFixed(1) + "%";
+      }
+
+      function formatBeatStreak(row) {
+        var need = (typeof row.beatStreakNeed === "number" && row.beatStreakNeed > 0) ?
+          row.beatStreakNeed :
+          ((SNAKE_SHAPE_LAB && SNAKE_SHAPE_LAB.BEAT_STREAK_NEED) || 10);
+        var n = typeof row.beatStreak === "number" ? row.beatStreak : 0;
+        if (n < 0) {
+          n = 0;
+        }
+        if (n > need) {
+          n = need;
+        }
+        return n + "/" + need;
+      }
+
+      function formatPopTable(popRows) {
+        var botW = 3;
+        var usedW = 6;
+        var wrW = 6;
+        var beatW = 5;
+        var toBeatW = 8;
+        var i;
+        for (i = 0; i < popRows.length; i += 1) {
+          if (popRows[i].label.length > botW) {
+            botW = popRows[i].label.length;
+          }
+        }
+        var lines = [
+          padRight("Bot", botW) + " | " +
+            padLeft("train_s", usedW) + " | " +
+            padLeft("succ%", wrW) + " | " +
+            padRight("beat", beatW) + " | " +
+            padLeft("toBeat_s", toBeatW),
+          dashRepeat(botW) + "-+-" +
+            dashRepeat(usedW) + "-+-" +
+            dashRepeat(wrW) + "-+-" +
+            dashRepeat(beatW) + "-+-" +
+            dashRepeat(toBeatW)
+        ];
+        for (i = 0; i < popRows.length; i += 1) {
+          var usedStr = popRows[i].secondsUsed.toFixed(1);
+          var wrStr = formatWr(popRows[i]);
+          var beatStr = formatBeatStreak(popRows[i]);
+          var toBeatStr = popRows[i].secondsToBeat === null ?
+            "-" : popRows[i].secondsToBeat.toFixed(2);
+          lines.push(
+            padRight(popRows[i].label, botW) + " | " +
+              padLeft(usedStr, usedW) + " | " +
+              padLeft(wrStr, wrW) + " | " +
+              padRight(beatStr, beatW) + " | " +
+              padLeft(toBeatStr, toBeatW)
+          );
+        }
+        return lines.join("\n");
+      }
+
+      function formatTourn(t) {
+        if (!t || !t.ranked) {
+          return "(none yet)";
+        }
+        var traineeRule = "---------------------------";
+        var lines = [];
+        var mazeN = t.mazeCount || 0;
+        var i;
+        for (i = 0; i < t.ranked.length; i += 1) {
+          var r = t.ranked[i];
+          var isTrainee = typeof r.label === "string" &&
+            r.label.indexOf("(trainee)") >= 0;
+          var succ = typeof r.successes === "number" ? r.successes : (r.wins || 0);
+          var apples = typeof r.apples === "number" ? r.apples : 0;
+          var eff = typeof r.avgEffSteps === "number" ?
+            r.avgEffSteps.toFixed(1) : "-";
+          var line = (i + 1) + ". " + r.label + ": " + succ + "/" + mazeN +
+            " boards | eff " + eff + " steps/win | apples " + apples;
+          if (isTrainee) {
+            lines.push(traineeRule);
+          }
+          lines.push(line);
+          if (isTrainee) {
+            lines.push(traineeRule);
+          }
+        }
+        lines.push("rank = boards beaten, then fewer steps/win, then apples" +
+          (t.sharedMazes ? " | shared seeds" : ""));
+        lines.push("duration=" + (t.durationMs / 1000).toFixed(2) + "s | boards=" +
+          mazeN + " | size=" + (t.size || "?") + "x" + (t.size || "?"));
+        return lines.join("\n");
+      }
+
+      function formatSizeTag(size) {
+        return (SNAKE_SHAPE_LAB && SNAKE_SHAPE_LAB.formatSizeTag) ?
+          SNAKE_SHAPE_LAB.formatSizeTag(size) : (size + "x" + size);
+      }
+
+      function formatSearchStatus(s, saveLine) {
+        return [
+          padRight("R" + s.round + " " + formatSizeTag(s.mazeSize || s.mmLevel), 12),
+          padRight(s.currentLabel || "-", 41),
+          padLeft("t=" + Number(s.currentUsed || 0).toFixed(1) + "s", 9),
+          padLeft(
+            s.bestBeatSec === null || s.bestBeatSec === undefined ?
+              "best=--" : ("best=" + Number(s.bestBeatSec).toFixed(1) + "s"),
+            12
+          ),
+          padRight(s.compassOn === false ? "nocomp" : "comp", 6),
+          padRight(
+            s.visionMode === "adaptive" || s.visionMode === undefined ?
+              "vis=A" : ("vis=r" + s.visionMode),
+            6
+          ),
+          padRight(
+            s.teachEachOther ?
+              (s.learnFromMaster ? "MASTR" : "TEACH") : "solo",
+            5
+          ),
+          padRight(s.paused ? "PAUSE" : "RUN", 5),
+          padRight(saveLine || "not saved yet", 28)
+        ].join(" | ");
+      }
+
+      /* Under 60s: decimal seconds; else m:ss or h:mm:ss (floored). */
+      function formatTrainDuration(sec, decimals) {
+        var n = Number(sec);
+        if (!isFinite(n) || n < 0) {
+          n = 0;
+        }
+        var dec = typeof decimals === "number" ? decimals : 1;
+        if (n < 60) {
+          return n.toFixed(dec) + "s";
+        }
+        var whole = Math.floor(n);
+        var s = whole % 60;
+        var mTotal = Math.floor(whole / 60);
+        var pad2 = function (x) {
+          return (x < 10 ? "0" : "") + x;
+        };
+        if (mTotal < 60) {
+          return mTotal + ":" + pad2(s);
+        }
+        var h = Math.floor(mTotal / 60);
+        var m = mTotal % 60;
+        return h + ":" + pad2(m) + ":" + pad2(s);
+      }
+
+      function formatTrainStatus(t, saveLine) {
+        var label = t.hasTrainee ? (t.label || "-") : "(no trainee)";
+        return [
+          padRight(label, 42),
+          padLeft(formatSizeTag(t.mazeSize || t.mmLevel || 3), 6),
+          padLeft("train=" + formatTrainDuration(t.totalTrainSec || 0, 1), 16),
+          padRight(t.paused ? "PAUSED" : (t.hasTrainee ? "RUN" : "IDLE"), 6),
+          padRight(saveLine || "not saved yet", 28)
+        ].join(" | ");
+      }
+
+      function formatTournHistory(history) {
+        if (!history || !history.length) {
+          return "(none yet)";
+        }
+        return history.map(function (h) {
+          var top = h.top || [];
+          var lines = ["#" + h.round + " " + formatSizeTag(h.mazeSize || h.mmLevel)];
+          if (!top.length) {
+            lines.push("  (no learned bots)");
+          } else {
+            top.forEach(function (r, i) {
+              var succ = typeof r.successes === "number" ? r.successes : (r.wins || 0);
+              var eff = typeof r.avgEffSteps === "number" ?
+                (" | eff " + r.avgEffSteps.toFixed(1) + " steps/win") : "";
+              lines.push("  " + (i + 1) + ". " + r.label + ": " + succ +
+                " boards" + eff);
+            });
+          }
+          return lines.join("\n");
+        }).join("\n");
+      }
+
+      function render(snap) {
+        if (els.labSaveStatus && !els.labSaveStatus.hidden) {
+          els.labSaveStatus.textContent = snap.saveStatusLine || "not saved yet";
+        }
+        var warn = document.getElementById("perfWarn");
+        if (warn) {
+          warn.hidden = !snap.slowUi;
+        }
+        var s = snap.search;
+        els.searchStatus.textContent = formatSearchStatus(s, snap.saveStatusLine);
+        els.btnPauseSearch.textContent = s.userPaused ? "Resume Search" : "Pause Search";
+        var chkComp = document.getElementById("chkCompass");
+        if (chkComp && chkComp.checked !== (s.compassOn !== false)) {
+          chkComp.checked = s.compassOn !== false;
+        }
+        var selVis = document.getElementById("selVisionMode");
+        if (selVis) {
+          var vm = s.visionMode === undefined || s.visionMode === null ?
+            "adaptive" : String(s.visionMode);
+          if (selVis.value !== vm) {
+            selVis.value = vm;
+          }
+        }
+        var chkTeach = document.getElementById("chkTeachEachOther");
+        if (chkTeach && chkTeach.checked !== !!s.teachEachOther) {
+          chkTeach.checked = !!s.teachEachOther;
+        }
+        var chkMaster = document.getElementById("chkLearnFromMaster");
+        if (chkMaster && chkMaster.checked !== !!s.learnFromMaster) {
+          chkMaster.checked = !!s.learnFromMaster;
+        }
+        els.searchTable.textContent = formatPopTable(s.rows || []);
+        if (els.searchTournHeading) {
+          els.searchTournHeading.textContent = s.tournamentHeading || "Latest tournament";
+        }
+        els.searchTourn.textContent = formatTourn(s.lastTournament);
+        els.searchHistory.textContent = formatTournHistory(s.history);
+
+        var t = snap.trainOne;
+        els.trainStatus.textContent = formatTrainStatus(t, snap.saveStatusLine);
+        document.getElementById("btnPauseTrain").textContent =
+          t.userPaused ? "Resume" : "Pause";
+        if (!t.hasTrainee) {
+          els.trainLadder.textContent = "(not started)";
+        } else {
+          var climbBeat = formatBeatStreak(t);
+          els.trainLadder.textContent = t.ladder.length ?
+            t.ladder.map(function (L) {
+              return formatSizeTag(L.mazeSize || L.mmLevel) + ": " +
+                formatTrainDuration(L.seconds, 2) +
+                " (WR " + L.winRate.toFixed(2) + ")";
+            }).join("\n") +
+            "\nclimbing " + formatSizeTag(t.mazeSize) +
+            " | beat " + climbBeat +
+            " | total " + formatTrainDuration(t.totalTrainSec, 1) :
+            "(still working on " + formatSizeTag(t.mazeSize) +
+            ", beat " + climbBeat +
+            ", total " + formatTrainDuration(t.totalTrainSec, 1) + ")";
+        }
+        els.trainTourn.textContent = formatTourn(t.lastTournament);
+
+        var selected = els.trainBotSelect.value;
+        els.trainBotSelect.innerHTML = "";
+        snap.catalog.forEach(function (c) {
+          var opt = document.createElement("option");
+          opt.value = c.id;
+          opt.textContent = c.label;
+          els.trainBotSelect.appendChild(opt);
+        });
+        if (selected) {
+          els.trainBotSelect.value = selected;
+        }
+      }
+
+      var lab = SNAKE_SHAPE_LAB.init({ onSnapshot: render });
+
+      var appShim = {
+        pickPlayMove: function (algoId, env) {
+          return lab.pickPlayMove(algoId, env);
+        },
+        getPlayCatalog: function () {
+          return lab.getPlayCatalog();
+        },
+        resolvePlayAgent: function (algoId) {
+          return lab.resolvePlayAgent(algoId);
+        }
+      };
+
+      SNAKE_PLAY.initTabs(appShim, {
+        lab: lab,
+        tabSearch: document.getElementById("tabSearch"),
+        tabTrain: document.getElementById("tabTrain"),
+        tabPlay: document.getElementById("tabPlay"),
+        tabAbout: document.getElementById("tabAbout"),
+        panelSearch: document.getElementById("panelSearch"),
+        panelTrain: document.getElementById("panelTrain"),
+        panelPlay: document.getElementById("panelPlay"),
+        panelAbout: document.getElementById("panelAbout")
+      });
+
+      els.btnPauseSearch.addEventListener("click", function () {
+        lab.search.setPaused(!lab.search.userPaused, true);
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnRunTournSearch").addEventListener("click", function () {
+        lab.search.manualTournament();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnSaveLab").addEventListener("click", function () {
+        lab.saveLocal(function (st) {
+          if (!st.ok) {
+            showError("Save failed: " + (st.error || "unknown"));
+          }
+          render(lab.getSnapshot());
+        });
+      });
+      document.getElementById("chkCompass").addEventListener("change", function (ev) {
+        if (SNAKE_APP.setCompassOn) {
+          SNAKE_APP.setCompassOn(!!ev.target.checked);
+        } else {
+          SNAKE_APP.compassOn = !!ev.target.checked;
+        }
+        if (window.confirm("Rebuild population for compass setting? (obs size changes; weights reset)")) {
+          lab.search.initPopulation();
+        }
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("selVisionMode").addEventListener("change", function (ev) {
+        lab.search.setVisionMode(ev.target.value);
+        if (window.confirm("Rebuild population for this vision setting? (weights reset)")) {
+          lab.search.initPopulation();
+        }
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("chkTeachEachOther").addEventListener("change", function (ev) {
+        lab.search.teachEachOther = !!ev.target.checked;
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("chkLearnFromMaster").addEventListener("change", function (ev) {
+        lab.search.learnFromMaster = !!ev.target.checked;
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnResetLab").addEventListener("click", function () {
+        if (window.confirm("Reset shape search population and clear saved progress?")) {
+          lab.resetAll();
+          render(lab.getSnapshot());
+        }
+      });
+      document.getElementById("btnStartTrain").addEventListener("click", function () {
+        var id = els.trainBotSelect.value;
+        if (!lab.startTrainFromCatalog(id)) {
+          showError("Could not load that bot.");
+          return;
+        }
+        lab.trainOne.setPaused(false, true);
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnPauseTrain").addEventListener("click", function () {
+        lab.trainOne.setPaused(!lab.trainOne.userPaused, true);
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnExportTrain").addEventListener("click", function () {
+        var exp = lab.exportTrainee();
+        if (!exp) {
+          showError("No trainee to export.");
+          return;
+        }
+        var blob = new Blob([JSON.stringify(exp, null, 2)], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "snake-shape-bot.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+      document.getElementById("btnImportTrain").addEventListener("click", function () {
+        var input = document.getElementById("trainImportFile");
+        input.value = "";
+        input.click();
+      });
+      document.getElementById("trainImportFile").addEventListener("change", function () {
+        var file = this.files && this.files[0];
+        if (!file) {
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+          var payload;
+          try {
+            payload = JSON.parse(String(reader.result || ""));
+          } catch (err) {
+            showError("Import file is not valid JSON.");
+            return;
+          }
+          var suggested = payload && payload.label ? String(payload.label) : "Imported bot";
+          var name = window.prompt("Name this bot", suggested);
+          if (name === null) {
+            return;
+          }
+          try {
+            lab.importTrainee(payload, name);
+            render(lab.getSnapshot());
+          } catch (err2) {
+            showError(err2.message || String(err2));
+          }
+        };
+        reader.onerror = function () {
+          showError("Could not read the import file.");
+        };
+        reader.readAsText(file);
+      });
+      document.getElementById("btnPromoteTrain").addEventListener("click", function () {
+        if (!lab.trainOne.trainee) {
+          showError("No trainee to save.");
+          return;
+        }
+        if (!window.confirm("Save trainee weights into Shape Search?")) {
+          return;
+        }
+        if (!lab.promoteTraineeToSearch()) {
+          showError("Save to Search failed.");
+          return;
+        }
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnRestartLadder").addEventListener("click", function () {
+        if (!lab.trainOne.trainee) {
+          showError("No trainee to restart.");
+          return;
+        }
+        lab.trainOne.restartLadder();
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      document.getElementById("btnResetTrain").addEventListener("click", function () {
+        if (!lab.trainOne.trainee) {
+          showError("No trainee to reset.");
+          return;
+        }
+        if (!window.confirm("Wipe this trainee's weights and start fresh?")) {
+          return;
+        }
+        lab.trainOne.resetTrainee();
+        lab.saveLocal();
+        render(lab.getSnapshot());
+      });
+      } /* end boot */
+
+      function startWhenReady() {
+        if (window.tf && tf.setBackend && tf.ready) {
+          tf.setBackend("cpu").then(function () {
+            return tf.ready();
+          }).then(boot).catch(function (err) {
+            console.warn("TF.js ready failed; continuing", err);
+            boot();
+          });
+        } else {
+          boot();
+        }
+      }
+      startWhenReady();
+    })();
+  </script>
+</body>
+</html>
